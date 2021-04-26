@@ -1,5 +1,5 @@
 python train.py \
-  --dataset_name 'zara1' \
+  --dataset_name 'trajectory_combined' \
   --delim tab \
   --d_type 'local' \
   --pred_len 8 \
@@ -29,6 +29,7 @@ python train.py \
   --pooling_type 'pool_net' \
   --clipping_threshold_g 1.5 \
   --best_k 10 \
-  --gpu_num 1 \
+  --gpu_num 0 \
   --checkpoint_name gan_test \
-  --restore_from_checkpoint 0
+  --restore_from_checkpoint 0 \
+  --output_dir './output_nuscenes_combined'
