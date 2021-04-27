@@ -24,7 +24,10 @@ torch.backends.cudnn.benchmark = True
 parser = argparse.ArgumentParser()
 FORMAT = "[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
-logger = logging.getLogger(__name__)
+
+# logger = logging.getLogger(__name__)
+# set_logger(os.path.join(args.output_dir, f"train_{args.dataset_name}.log"))
+
 
 # Dataset options
 parser.add_argument("--dataset_name", default="zara1", type=str)
@@ -106,6 +109,35 @@ def get_dtypes(args):
         long_dtype = torch.cuda.LongTensor
         float_dtype = torch.cuda.FloatTensor
     return long_dtype, float_dtype
+
+def set_logger(log_path, logger):
+    """Set the logger to log info in terminal and file `log_path`.
+
+    In general, it is useful to have a logger so that every output to the terminal is saved
+    in a permanent file. Here we save it to `model_dir/train.log`.
+
+    Example:
+    ```
+    logging.info("Starting training...")
+    ```
+
+    Args:
+        log_path: (string) where to log
+    """
+    # logger = logging.getLogger()
+
+    if not logger.handlers:
+        # Logging to a file
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(
+            logging.Formatter(FORMAT)
+        )
+        logger.addHandler(file_handler)
+
+        # Logging to console
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter(FORMAT))
+        logger.addHandler(stream_handler)
 
 
 def main(args):
@@ -584,4 +616,6 @@ def cal_fde(pred_traj_gt, pred_traj_fake, linear_ped, non_linear_ped):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    logger = logging.getLogger(__name__)
+    set_logger(os.path.join(args.output_dir, f"train_{args.dataset_name}.log"), logger)
     main(args)
