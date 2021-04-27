@@ -25,7 +25,7 @@ torch.backends.cudnn.benchmark = True
 parser = argparse.ArgumentParser()
 FORMAT = "[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
-
+# torch.manual_seed(0) # for debug
 # logger = logging.getLogger(__name__)
 # set_logger(os.path.join(args.output_dir, f"train_{args.dataset_name}.log"))
 
@@ -136,16 +136,15 @@ def set_logger(log_path, logger):
         logger.addHandler(file_handler)
 
         # Logging to console
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(logging.Formatter(FORMAT))
-        logger.addHandler(stream_handler)
+        # stream_handler = logging.StreamHandler()
+        # stream_handler.setFormatter(logging.Formatter(FORMAT))
+        # logger.addHandler(stream_handler)
 
 
 def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
     train_path = get_dset_path(args.dataset_name, "train")
     val_path = get_dset_path(args.dataset_name, "val")
-    os.makedirs(args.output_dir, exist_ok=True)
 
     long_dtype, float_dtype = get_dtypes(args)
 
@@ -619,6 +618,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # keep track of console outputs and experiment settings
+    os.makedirs(args.output_dir, exist_ok=True)
     config_file = open(os.path.join(args.output_dir, f"config_{args.dataset_name}.yaml"), "w")
     yaml.dump(args, config_file)
     logger = logging.getLogger(__name__)

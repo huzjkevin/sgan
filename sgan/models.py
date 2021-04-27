@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+# torch.manual_seed(0) # for debug
 
 def make_mlp(dim_list, activation="relu", batch_norm=True, dropout=0):
     layers = []
@@ -428,7 +429,7 @@ class TrajectoryGenerator(nn.Module):
         self.bottleneck_dim = 1024
 
         # TEST: for cGAN
-        self.num_cls_embedding = 3
+        # self.num_cls_embedding = 3
         self.cls_embedding_dim = 16
         # self.cls_embedding = nn.Embedding(self.num_cls_embedding, self.cls_embedding_dim)
 
@@ -636,7 +637,7 @@ class TrajectoryDiscriminator(nn.Module):
         self.d_type = d_type
 
         # TEST: for cGAN
-        self.num_cls_embedding = 3
+        # self.num_cls_embedding = 3
         self.cls_embedding_dim = 16
         # self.cls_embedding = nn.Embedding(self.num_cls_embedding, self.cls_embedding_dim)
 

@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset
 
 logger = logging.getLogger(__name__)
-
+# np.random.seed(0) # for debug
 
 def seq_collate(data):
     (
@@ -228,6 +228,7 @@ class TrajectoryDataset(Dataset):
         return self.num_seq
 
     def __getitem__(self, index):
+        # index = 10 # one sample overfit
         start, end = self.seq_start_end[index]
         out = [
             self.obs_traj[start:end, :],
