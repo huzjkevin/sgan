@@ -475,6 +475,7 @@ class TrajectoryGenerator(nn.Module):
                 dropout=dropout,
                 neighborhood_size=neighborhood_size,
                 grid_size=grid_size,
+                pool_dim=encoder_h_dim
             )
 
         if self.noise_dim[0] == 0:

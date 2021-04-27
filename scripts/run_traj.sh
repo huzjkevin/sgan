@@ -26,7 +26,7 @@ python train.py \
   --print_every 50 \
   --num_iterations 20000 \
   --num_epochs 500 \
-  --pooling_type 'pool_net' \
+  --pooling_type 'spool' \
   --clipping_threshold_g 1.5 \
   --best_k 10 \
   --gpu_num 0 \
