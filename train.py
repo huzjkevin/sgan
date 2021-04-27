@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+import yaml
 
 from collections import defaultdict
 
@@ -616,6 +617,11 @@ def cal_fde(pred_traj_gt, pred_traj_fake, linear_ped, non_linear_ped):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    # keep track of console outputs and experiment settings
+    config_file = open(os.path.join(args.output_dir, f"config_{args.dataset_name}.yaml"), "w")
+    yaml.dump(args, config_file)
     logger = logging.getLogger(__name__)
     set_logger(os.path.join(args.output_dir, f"train_{args.dataset_name}.log"), logger)
+
     main(args)
