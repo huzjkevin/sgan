@@ -46,13 +46,15 @@ class Encoder(nn.Module):
         self.embedding_dim = embedding_dim
         self.num_layers = num_layers
 
-        self.encoder = nn.LSTM(embedding_dim, h_dim, num_layers, dropout=dropout)
-
-        self.spatial_embedding = nn.Linear(2, embedding_dim)
-
         # TEST: cGAN
         self.cls_embedding_dim = cls_embedding_dim
         self.cls_embedding = nn.Linear(1, cls_embedding_dim)
+
+        self.encoder = nn.LSTM(embedding_dim + self.cls_embedding_dim, h_dim, num_layers, dropout=dropout) # TEST cGAN
+
+        self.spatial_embedding = nn.Linear(2, embedding_dim)
+
+        
 
     def init_hidden(self, batch):
         return (
@@ -75,12 +77,14 @@ class Encoder(nn.Module):
 
         # TEST: cGAN
         obs_cls_embedding = self.cls_embedding(cls_labels)
-        obs_cls_embedding = obs_cls_embedding.view(-1, batch, self.cls_embedding_dim)
+        obs_cls_embedding = torch.cat([obs_cls_embedding.view(-1, batch, self.cls_embedding_dim)] * obs_traj_embedding.shape[0], dim=0)
+
+        obs_traj_embedding = torch.cat((obs_traj_embedding, obs_cls_embedding), dim=-1)
 
         state_tuple = self.init_hidden(batch)
         output, state = self.encoder(obs_traj_embedding, state_tuple)
         final_h = state[0]
-        final_h = torch.cat((state[0], obs_cls_embedding), dim=-1)
+        # final_h = torch.cat((state[0], obs_cls_embedding), dim=-1)
         return final_h
 
 
@@ -461,7 +465,7 @@ class TrajectoryGenerator(nn.Module):
         if pooling_type == "pool_net":
             self.pool_net = PoolHiddenNet(
                 embedding_dim=self.embedding_dim,
-                h_dim=encoder_h_dim + self.cls_embedding_dim, # TEST: cGAN
+                h_dim=encoder_h_dim,
                 mlp_dim=mlp_dim,
                 bottleneck_dim=bottleneck_dim,
                 activation=activation,
@@ -469,7 +473,7 @@ class TrajectoryGenerator(nn.Module):
             )
         elif pooling_type == "spool":
             self.pool_net = SocialPooling(
-                h_dim=encoder_h_dim + self.cls_embedding_dim, # TEST: cGAN
+                h_dim=encoder_h_dim,
                 activation=activation,
                 batch_norm=batch_norm,
                 dropout=dropout,
@@ -485,9 +489,9 @@ class TrajectoryGenerator(nn.Module):
 
         # Decoder Hidden
         if pooling_type:
-            input_dim = encoder_h_dim + self.cls_embedding_dim + bottleneck_dim # TEST: cGAN
+            input_dim = encoder_h_dim + bottleneck_dim
         else:
-            input_dim = encoder_h_dim + self.cls_embedding_dim # TEST: cGAN
+            input_dim = encoder_h_dim
 
         if self.mlp_decoder_needed():
             mlp_decoder_context_dims = [
@@ -576,7 +580,7 @@ class TrajectoryGenerator(nn.Module):
             mlp_decoder_context_input = torch.cat(
                 [
                     final_encoder_h.view(
-                        -1, self.encoder_h_dim + self.cls_embedding_dim
+                        -1, self.encoder_h_dim
                     ),
                     pool_h,
                 ],
@@ -585,7 +589,7 @@ class TrajectoryGenerator(nn.Module):
         else:
             # TEST: cGAN
             mlp_decoder_context_input = final_encoder_h.view(
-                -1, self.encoder_h_dim + self.cls_embedding_dim
+                -1, self.encoder_h_dim
             )
 
         # Add Noise
@@ -659,7 +663,7 @@ class TrajectoryDiscriminator(nn.Module):
         #     dropout=dropout,
         # )
 
-        real_classifier_dims = [h_dim + self.cls_embedding_dim, mlp_dim, 1] # TEST: cGAN
+        real_classifier_dims = [h_dim, mlp_dim, 1]
         self.real_classifier = make_mlp(
             real_classifier_dims,
             activation=activation,
