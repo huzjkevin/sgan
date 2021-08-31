@@ -4,30 +4,38 @@ import logging
 import os
 import sys
 import time
+import datetime
+import yaml
+import random
+import numpy as np
 
 from collections import defaultdict
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 from sgan.data.loader import data_loader
 from sgan.losses import gan_g_loss, gan_d_loss, l2_loss
 from sgan.losses import displacement_error, final_displacement_error
 
 from sgan.models import TrajectoryGenerator, TrajectoryDiscriminator
-from sgan.utils import int_tuple, bool_flag, get_total_norm
+from sgan.utils import int_tuple, bool_flag, get_total_norm, set_logger
 from sgan.utils import relative_to_abs, get_dset_path
 
 torch.backends.cudnn.benchmark = True
 
 parser = argparse.ArgumentParser()
-FORMAT = '[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s'
-logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
-logger = logging.getLogger(__name__)
+# FORMAT = '[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s'
+# logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
+# logger = logging.getLogger(__name__)
+
+
+parser.add_argument("--log_dir", default="./", help="Directory containing logging file")
 
 # Dataset options
-parser.add_argument('--dataset_name', default='zara1', type=str)
+parser.add_argument('--dataset_name', default='trajectory_combined', type=str)
 parser.add_argument('--delim', default=' ')
 parser.add_argument('--loader_num_workers', default=4, type=int)
 parser.add_argument('--obs_len', default=8, type=int)
@@ -109,6 +117,32 @@ def get_dtypes(args):
 
 
 def main(args):
+    curr_time = datetime.datetime.now()
+    output_dir = f"exp_{args.dataset_name}_{curr_time.strftime('%Y%m%d%H%M%S')}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    checkpoint_dir = os.path.join(output_dir, f"checkpoint_{args.dataset_name}")
+    if os.path.exists(checkpoint_dir) is False:
+        os.mkdir(checkpoint_dir)
+
+    # keep track of console outputs and experiment settings
+    set_logger(
+        os.path.join(output_dir, args.log_dir, f"train_{args.dataset_name}.log")
+    )
+    config_file = open(
+        os.path.join(output_dir, f"config_{args.dataset_name}.yaml"), "w"
+    )
+    yaml.dump(args, config_file)
+    tensorboard_dir = os.path.join(output_dir, "tensorboard")
+    writer = SummaryWriter(tensorboard_dir)
+
+    random.seed(72)
+    np.random.seed(72)
+    torch.manual_seed(72)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
     train_path = get_dset_path(args.dataset_name, 'train')
     val_path = get_dset_path(args.dataset_name, 'val')
@@ -116,16 +150,16 @@ def main(args):
 
     long_dtype, float_dtype = get_dtypes(args)
 
-    logger.info("Initializing train dataset")
+    logging.info("Initializing train dataset")
     train_dset, train_loader = data_loader(args, train_path)
-    logger.info("Initializing val dataset")
+    logging.info("Initializing val dataset")
     _, val_loader = data_loader(args, val_path)
 
     iterations_per_epoch = len(train_dset) / args.batch_size / args.d_steps
     if args.num_epochs:
         args.num_iterations = int(iterations_per_epoch * args.num_epochs)
 
-    logger.info(
+    logging.info(
         'There are {} iterations per epoch'.format(iterations_per_epoch)
     )
 
@@ -150,8 +184,8 @@ def main(args):
 
     generator.apply(init_weights)
     generator.type(float_dtype).train()
-    logger.info('Here is the generator:')
-    logger.info(generator)
+    logging.info('Here is the generator:')
+    logging.info(generator)
 
     discriminator = TrajectoryDiscriminator(
         obs_len=args.obs_len,
@@ -166,8 +200,8 @@ def main(args):
 
     discriminator.apply(init_weights)
     discriminator.type(float_dtype).train()
-    logger.info('Here is the discriminator:')
-    logger.info(discriminator)
+    logging.info('Here is the discriminator:')
+    logging.info(discriminator)
 
     g_loss_fn = gan_g_loss
     d_loss_fn = gan_d_loss
@@ -186,7 +220,7 @@ def main(args):
                                     '%s_with_model.pt' % args.checkpoint_name)
 
     if restore_path is not None and os.path.isfile(restore_path):
-        logger.info('Restoring from checkpoint {}'.format(restore_path))
+        logging.info('Restoring from checkpoint {}'.format(restore_path))
         checkpoint = torch.load(restore_path)
         generator.load_state_dict(checkpoint['g_state'])
         discriminator.load_state_dict(checkpoint['d_state'])
@@ -230,8 +264,8 @@ def main(args):
         d_steps_left = args.d_steps
         g_steps_left = args.g_steps
         epoch += 1
-        logger.info('Starting epoch {}'.format(epoch))
-        for batch in train_loader:
+        logging.info('Starting epoch {}'.format(epoch))
+        for batch_idx, batch in enumerate(train_loader):
             if args.timing == 1:
                 torch.cuda.synchronize()
                 t1 = time.time()
@@ -244,6 +278,9 @@ def main(args):
                 losses_d = discriminator_step(args, batch, generator,
                                               discriminator, d_loss_fn,
                                               optimizer_d)
+
+                for k, v in losses_d.items():
+                    writer.add_scalar(f"train/{k}", v, t)
                 checkpoint['norm_d'].append(
                     get_total_norm(discriminator.parameters()))
                 d_steps_left -= 1
@@ -252,6 +289,9 @@ def main(args):
                 losses_g = generator_step(args, batch, generator,
                                           discriminator, g_loss_fn,
                                           optimizer_g)
+
+                for k, v in losses_g.items():
+                    writer.add_scalar(f"train/{k}", v, t)
                 checkpoint['norm_g'].append(
                     get_total_norm(generator.parameters())
                 )
@@ -260,7 +300,7 @@ def main(args):
             if args.timing == 1:
                 torch.cuda.synchronize()
                 t2 = time.time()
-                logger.info('{} step took {}'.format(step_type, t2 - t1))
+                logging.info('{} step took {}'.format(step_type, t2 - t1))
 
             # Skip the rest if we are not at the end of an iteration
             if d_steps_left > 0 or g_steps_left > 0:
@@ -268,19 +308,19 @@ def main(args):
 
             if args.timing == 1:
                 if t0 is not None:
-                    logger.info('Interation {} took {}'.format(
+                    logging.info('Interation {} took {}'.format(
                         t - 1, time.time() - t0
                     ))
                 t0 = time.time()
 
             # Maybe save loss
             if t % args.print_every == 0:
-                logger.info('t = {} / {}'.format(t + 1, args.num_iterations))
+                logging.info('t = {} / {}'.format(t + 1, args.num_iterations))
                 for k, v in sorted(losses_d.items()):
-                    logger.info('  [D] {}: {:.3f}'.format(k, v))
+                    logging.info('  [D] {}: {:.3f}'.format(k, v))
                     checkpoint['D_losses'][k].append(v)
                 for k, v in sorted(losses_g.items()):
-                    logger.info('  [G] {}: {:.3f}'.format(k, v))
+                    logging.info('  [G] {}: {:.3f}'.format(k, v))
                     checkpoint['G_losses'][k].append(v)
                 checkpoint['losses_ts'].append(t)
 
@@ -291,34 +331,35 @@ def main(args):
                 checkpoint['sample_ts'].append(t)
 
                 # Check stats on the validation set
-                logger.info('Checking stats on val ...')
+                logging.info('Checking stats on val ...')
                 metrics_val = check_accuracy(
                     args, val_loader, generator, discriminator, d_loss_fn
                 )
-                logger.info('Checking stats on train ...')
+                logging.info('Checking stats on train ...')
                 metrics_train = check_accuracy(
                     args, train_loader, generator, discriminator,
                     d_loss_fn, limit=True
                 )
 
                 for k, v in sorted(metrics_val.items()):
-                    logger.info('  [val] {}: {:.3f}'.format(k, v))
+                    logging.info('  [val] {}: {:.3f}'.format(k, v))
+                    writer.add_scalar(f"val/{k}", v, t)
                     checkpoint['metrics_val'][k].append(v)
                 for k, v in sorted(metrics_train.items()):
-                    logger.info('  [train] {}: {:.3f}'.format(k, v))
+                    logging.info('  [train] {}: {:.3f}'.format(k, v))
                     checkpoint['metrics_train'][k].append(v)
 
                 min_ade = min(checkpoint['metrics_val']['ade'])
                 min_ade_nl = min(checkpoint['metrics_val']['ade_nl'])
 
                 if metrics_val['ade'] == min_ade:
-                    logger.info('New low for avg_disp_error')
+                    logging.info('New low for avg_disp_error')
                     checkpoint['best_t'] = t
                     checkpoint['g_best_state'] = generator.state_dict()
                     checkpoint['d_best_state'] = discriminator.state_dict()
 
                 if metrics_val['ade_nl'] == min_ade_nl:
-                    logger.info('New low for avg_disp_error_nl')
+                    logging.info('New low for avg_disp_error_nl')
                     checkpoint['best_t_nl'] = t
                     checkpoint['g_best_nl_state'] = generator.state_dict()
                     checkpoint['d_best_nl_state'] = discriminator.state_dict()
@@ -332,15 +373,15 @@ def main(args):
                 checkpoint_path = os.path.join(
                     args.output_dir, '%s_with_model.pt' % args.checkpoint_name
                 )
-                logger.info('Saving checkpoint to {}'.format(checkpoint_path))
+                logging.info('Saving checkpoint to {}'.format(checkpoint_path))
                 torch.save(checkpoint, checkpoint_path)
-                logger.info('Done.')
+                logging.info('Done.')
 
                 # Save a checkpoint with no model weights by making a shallow
                 # copy of the checkpoint excluding some items
                 checkpoint_path = os.path.join(
-                    args.output_dir, '%s_no_model.pt' % args.checkpoint_name)
-                logger.info('Saving checkpoint to {}'.format(checkpoint_path))
+                    checkpoint_dir, '%s_no_model.pt' % args.checkpoint_name)
+                logging.info('Saving checkpoint to {}'.format(checkpoint_path))
                 key_blacklist = [
                     'g_state', 'd_state', 'g_best_state', 'g_best_nl_state',
                     'g_optim_state', 'd_optim_state', 'd_best_state',
@@ -351,7 +392,7 @@ def main(args):
                     if k not in key_blacklist:
                         small_checkpoint[k] = v
                 torch.save(small_checkpoint, checkpoint_path)
-                logger.info('Done.')
+                logging.info('Done.')
 
             t += 1
             d_steps_left = args.d_steps
