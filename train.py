@@ -146,7 +146,7 @@ def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
     train_path = get_dset_path(args.dataset_name, 'train')
     val_path = get_dset_path(args.dataset_name, 'val')
-    os.makedirs(args.output_dir, exist_ok=True)
+    # os.makedirs(args.output_dir, exist_ok=True)
 
     long_dtype, float_dtype = get_dtypes(args)
 
@@ -371,7 +371,7 @@ def main(args):
                 checkpoint['d_state'] = discriminator.state_dict()
                 checkpoint['d_optim_state'] = optimizer_d.state_dict()
                 checkpoint_path = os.path.join(
-                    args.output_dir, '%s_with_model.pt' % args.checkpoint_name
+                    checkpoint_dir, '%s_with_model.pt' % args.checkpoint_name
                 )
                 logging.info('Saving checkpoint to {}'.format(checkpoint_path))
                 torch.save(checkpoint, checkpoint_path)

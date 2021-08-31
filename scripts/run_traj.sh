@@ -2,7 +2,7 @@ python train.py \
   --dataset_name 'trajectory_combined' \
   --delim tab \
   --d_type 'local' \
-  --pred_len 8 \
+  --pred_len 12 \
   --encoder_h_dim_g 32 \
   --encoder_h_dim_d 64\
   --decoder_h_dim 32 \
@@ -32,4 +32,3 @@ python train.py \
   --gpu_num 0 \
   --checkpoint_name gan_test \
   --restore_from_checkpoint 0 \
-  --output_dir './output_nuscenes_combined'
